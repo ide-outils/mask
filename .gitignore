@@ -11,12 +11,15 @@ ehthumbs.db
 Thumbs.db
 Desktop.ini
 $RECYCLE.BIN/
+Session.vim
 
 #######################################
 # rust/cargo
 #######################################
 /target
 **/*.rs.bk
+_expected
+_result
 
 #######################################
 # node

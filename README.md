@@ -439,6 +439,16 @@ $MASK start
 ```
 ````
 
+### Alias
+To quickly create aliases, you might prefer using `|` :
+
+````md
+## command | alias1 | alias2 | etc
+````
+
+Would generate 3 aliases (`alias1`, `alias2` and `etc`).
+
+
 ### Inherits the script's exit code
 
 If your command exits with an error, `mask` will exit with its status code. This allows you to chain commands which will exit on the first error.
