@@ -14,9 +14,6 @@ pub fn parse(maskfile_contents: String) -> Command {
     let mut commands: Vec<Command> = vec![];
     let current_command = &mut Command::new("");
     *current_command = mem::take(current_command).add(Mask::new(0));
-    // let current_mask = &mut MaskData::new(1);
-    // let current_args = &mut vec![];
-    // let current_aliases = &mut vec![];
     let current_option_flag = &mut Arg::new("");
     let text = RefCell::new(String::new());
     let mut list_level = 0;
@@ -27,8 +24,6 @@ pub fn parse(maskfile_contents: String) -> Command {
             Start(tag) => {
                 match tag {
                     Tag::Header(heading_level) => {
-                        // Add the last command before starting a new one.
-                        // Don't add commands for level 1 heading blocks (the title).
                         let mut command = std::mem::take(current_command);
                         if !first {
                             if commands.len() == 0 {
@@ -37,6 +32,7 @@ pub fn parse(maskfile_contents: String) -> Command {
                             }
                             commands.push(command);
                         } else {
+                            // Do not add the not parsed first command.
                             first = false;
                         }
                         *current_command = mem::take(current_command).add(Mask::new(heading_level));
@@ -60,14 +56,11 @@ pub fn parse(maskfile_contents: String) -> Command {
                 Tag::Header(_level) => {
                     let (names, args, groups) = parse_command_name_required_and_optional_args(text.take());
                     let (name, aliases) = parse_command_name_and_aliases(names);
-                    // *current_aliases = aliases;
-                    // let required_args = required_args.into_iter().map(||);
                     *current_command = mem::take(current_command)
                         .name(name)
                         .args(args)
                         .aliases(aliases)
                         .groups(groups);
-                    // current_command.optional_args = optional_args;
                 }
                 Tag::BlockQuote => {
                     set! { current_command.about = text.take() };
@@ -97,7 +90,6 @@ pub fn parse(maskfile_contents: String) -> Command {
 
                 // Options level 1 is the flag name
                 if list_level == 1 {
-                    // current_option_flag.name = text.clone();
                     set! { current_option_flag.id = text.take() };
                 }
                 // Options level 2 is the flag config
@@ -135,10 +127,6 @@ pub fn parse(maskfile_contents: String) -> Command {
                             todo!(
                                 "We should apparently create a validator by setting `value_parser` problably a function."
                             )
-                            // current_option_flag.choices = val
-                            //     .split('|')
-                            //     .map(|choice| choice.trim().to_owned())
-                            //     .collect();
                         }
                         //    param    val
                         //   --------
@@ -160,24 +148,8 @@ pub fn parse(maskfile_contents: String) -> Command {
             _ => (),
         };
     }
-    // todo!()
-    // // Add the last command
-    // // let previous_cmd = std::mem::take(current_command);
-    // // commands.extend(previous_cmd.build_aliases(std::mem::take(current_aliases)));
-    // // let flatten = commands.iter().map(|cmd| cmd.to_ref()).collect();
-    // let aliases = std::mem::take(current_aliases);
-    // commands.push(std::mem::take(current_command).build(aliases));
-    // // flatten.push(previous_cmd);
-
-    // let mut commands = commands.into_iter();
-    // let Some(mut root) = commands.next() else {
-    //     // SAFTY: above, do not remove items from commands.
-    //     // and commands initialised with root.
-    //     unreachable!()
-    // };
-    // // Convert the flat commands array and to a tree of subcommands based on level
+    commands.push(mem::take(current_command));
     let mut root = commands.remove(0);
-    assert!(commands.len() > 1);
     let (subcommands, _) = treeify_commands(&mut root, &mut commands.into_iter());
     root.subcommands(subcommands)
 }
@@ -254,17 +226,6 @@ fn parse_command_name_required_and_optional_args(text: String) -> (String, Vec<A
     let mut arguments = vec![];
     let mut groups = vec![];
 
-    // let quit_args_group = || {
-    //     push_new_arg();
-    //     let args: Vec<_> = args.borrow_mut().drain(..).collect();
-    //     let ids = args.iter().map(|a| a.get_id());
-    //     let group_name = group_name.take();
-    //     if group_name != "" {
-    //         groups
-    //             .borrow_mut()
-    //             .push(ArgGroup::new(group_name).args(ids));
-    //     }
-    // };
     let mut chars = args_str.chars();
     let group_name = &mut String::new();
     while let Some(char) = chars.next() {
@@ -302,24 +263,6 @@ fn parse_command_name_required_and_optional_args(text: String) -> (String, Vec<A
             }
         }
     }
-    // // Collects (required_args)
-    // let required_args = args
-    //     .split(|c| c == '(' || c == ')')
-    //     .filter_map(|arg| match arg.trim() {
-    //         a if !a.is_empty() && !a.contains('[') => Some(RequiredArg::new(a.trim().to_string())),
-    //         _ => None,
-    //     })
-    //     .collect();
-
-    // // Collects [optional_args]
-    // let optional_args = args
-    //     .split(|c| c == '[' || c == ']')
-    //     .filter_map(|arg| match arg.trim() {
-    //         a if !a.is_empty() && !a.contains('(') => Some(OptionalArg::new(a.trim().to_string())),
-    //         _ => None,
-    //     })
-    //     .collect();
-
     (name, arguments, groups)
 }
 

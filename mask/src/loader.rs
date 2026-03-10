@@ -136,31 +136,6 @@ fn env_var(key: &str) -> Resettable<OsStr> {
     env::var(key).ok().map(|s| s.into()).into()
 }
 
-// /// Get the target maskfile
-// pub fn find_maskfile() -> Resettable<OsStr> {
-//     if let Some(path) = find_arg("--maskfile")
-//         .or(env::var(MASK_PATH_ENV).ok())
-//         .map(|s| OsStr::from(&s))
-//     {
-//         return Value(path);
-//     }
-//     let target = find_arg("--maskfile-name")
-//         .or(env::var(DEFAULT_FILE_NAME_ENV).ok())
-//         .unwrap_or(DEFAULT_FILE_NAME.to_string());
-//     find_file_from_current_to_root(&target)
-// }
-
-// /// Get the arg following the given target.
-// fn find_arg(target: &str) -> Option<String> {
-//     let mut args = env::args();
-//     while let Some(arg) = args.next() {
-//         if arg == target {
-//             return args.next();
-//         }
-//     }
-//     None
-// }
-
 fn find_file_from_current_to_root(file_name: &str) -> Resettable<OsStr> {
     find_file(file_name)
         .map(|p| p.into_os_string().into())
