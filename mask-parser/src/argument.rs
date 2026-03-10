@@ -1,7 +1,34 @@
+//! # Arguments
+//!
+//! The arguments can be precily configured, most of clap's features are supported.
+//!
+//! ## Overview
+//! An overview on what you can do, and where to find more informations about :
+//!
+//! ```
+//!                                                     parse_default_missing_value()       v
+//!      parse_name()                crate::arg_type                  |
+//! -------------------                  ------                  -----------
+//!    Config      Name                  Type              Missing Values Default
+//! ------------   ----                --------               --------------
+//! !?$*^%~_=#@.--?name <File1> <?run> : String = ./README.md =? ~/README.md => FilePath
+//!             ---    ---------------          -------------                -----------
+//!             Flag     Values' Name              Default                    ValueHint
+//!              |           |                    -----------                     |
+//!              |     parse_value_name()     parse_default_value()               v
+//!              v                                                         parse_value_hint()
+//!       extract_flag_config()
+//!          parse_flag()               
+//! ```
+//!
+//! ## Missing features
+//! A list of all missing features :
+//! WIP
 use std::mem;
 
 use clap::Arg;
 
+/// Write `Arg` using one of both methods supplied in the condition. (Readability)
 macro_rules! fill_flag {
     {
         $builder:ident
@@ -17,12 +44,17 @@ macro_rules! fill_flag {
     }
 }
 
+/// A container for the parsing data.
 #[derive(Default)]
 struct Parser {
+    /// Set when a long flag is found in names.
     first_long: Option<String>,
+    /// Set when a short flag is found in names.
     first_short: Option<char>,
+    /// The next available index value, in case this argument is positional.
     index: usize,
 }
+
 impl Parser {
     fn new(index: usize) -> Self {
         Self {
@@ -31,6 +63,14 @@ impl Parser {
         }
     }
 
+    /// Parse an argument's name.
+    ///
+    /// The name might be composed of 3 parts in the following order :
+    /// - Its config.
+    /// - The flag config (if you need a flag).
+    /// - Its name.
+    ///
+    /// Only the name is required.
     fn parse_name(&mut self, arg: Arg, configured_name: String) -> Arg {
         // extract config, flag_config and name (order of seeing)
         let (config, name) = extract_config(configured_name);
@@ -45,6 +85,19 @@ impl Parser {
         } else {
             arg = self.parse_flag(arg, flag_config, name.clone());
         }
+        arg
+    }
+
+    /// Options can contain config before their name.
+    ///
+    /// Exemple :
+    /// With `!_=` as the config part.
+    /// ```
+    /// !_=positional
+    /// !_=-s
+    /// !_=--long
+    /// ```
+    fn parse_config(&mut self, mut arg: Arg, config: String, name: String) -> Arg {
         for char in config {
             // Put some mnemonics on right eye comment.
             //
@@ -68,45 +121,45 @@ impl Parser {
         }
         arg
     }
+
+    /// Check if it is a flag.
+    ///
+    /// Cases :
+    /// - `--`
+    /// --
+    /// ```
     fn parse_flag(&mut self, mut arg: Arg, config: String, name: String) -> Arg {
-        if name != "" {
+        if name == "" || config == "" {
             return arg;
         }
         let first_long = &mut self.first_long;
         let first_short = &mut self.first_short;
         match config.as_str() {
             "--?" => {
-                if name != "" {
-                    fill_flag! { arg if first_long { long } else { alias } = name }
-                }
+                fill_flag! { arg if first_long { long } else { alias } = name }
             }
-            "--" => {
-                if name != "" {
-                    fill_flag! { arg if first_long { long } else { visible_alias } = name }
-                }
+            "--" | "--!" => {
+                fill_flag! { arg if first_long { long } else { visible_alias } = name }
             }
             "-?" => {
-                if let Some(char) = name.chars().next() {
-                    fill_flag! { arg if first_short { short } else { short_alias } = char }
-                }
+                let char = Option::unwrap(name.chars().next());
+                fill_flag! { arg if first_short { short } else { short_alias } = char }
             }
-            "-" => {
-                if let Some(char) = name.chars().next() {
-                    fill_flag! { arg if first_short { short } else { visible_short_alias } = char }
-                }
+            "-" | "-!" => {
+                let char = Option::unwrap(name.chars().next());
+                fill_flag! { arg if first_short { short } else { visible_short_alias } = char }
             }
             _ => (),
         }
         arg
     }
 }
+
+/// Parse comands' arguments.
+///
+/// It is used for both `Options`'s `flags` section and Headers's groups.
 pub(crate) fn parse(mut arg: Arg, chars: &mut impl Iterator<Item = char>, index: usize) -> (Arg, Option<char>) {
-    // RECAP: - `: `  for `Arg::value_parser`
-    //        - `= `  for `Arg::default_value`
-    //        - `=? ` for `Arg::default_missing_value`
-    //        - `=>`  for `Arg::value_hint`
     let mut parser = Parser::new(index);
-    // let mut chars = names.chars();
     type Name = String;
     type Names = Vec<Name>;
     let mut names = Names::new();
@@ -125,7 +178,12 @@ pub(crate) fn parse(mut arg: Arg, chars: &mut impl Iterator<Item = char>, index:
             prev = None;
             break;
         };
+        // Double char seeking.
         match (prev, char) {
+            // - `: `  for `Arg::value_parser`
+            // - `= `  for `Arg::default_value`
+            // - `=? ` for `Arg::default_missing_value`
+            // - `=>`  for `Arg::value_hint`
             (Some(':'), ' ') => {
                 let word = take_until_space(chars);
                 arg = crate::arg_type::parse(arg, word);
@@ -142,6 +200,7 @@ pub(crate) fn parse(mut arg: Arg, chars: &mut impl Iterator<Item = char>, index:
                 in_names = false;
             }
             (Some('='), '?') => match chars.next() {
+                // Lets ensure we are not in name's config.
                 Some(' ') => {
                     let word = take_until_space(chars);
                     arg = parse_default_missing_value(arg, word);
@@ -164,6 +223,7 @@ pub(crate) fn parse(mut arg: Arg, chars: &mut impl Iterator<Item = char>, index:
             _ => (),
         }
 
+        // Single char seeking.
         match char {
             // Next argument's separator
             // If you need to use it here, then you must either
@@ -203,14 +263,18 @@ pub(crate) fn parse(mut arg: Arg, chars: &mut impl Iterator<Item = char>, index:
             .first_long
             .or(parser.first_short.map(|c| c.to_string()))
             .unwrap_or("ErrorNoFlagNoPositional".to_string());
-        // FIXME: Return an error instead
-        // Then the caller of this function will need to remove the arg
-        // Another smooth solution, would be to add a field `errors` in `MaskData`
+        // FIXME: We don't want panic here, and we don't want neither handle errors one by one.
+        // Ideas :
+        // - Return an error instead.
+        //     Then the caller of this function will need to remove the arg
+        // - Add a field `errors` in `MaskData`
+        //     So pass &mut MaskData to this function.
         arg = arg.id(id);
     }
     (arg, prev)
 }
 
+/// Extract chars until the next white space. The space is consumed.
 fn take_until_space(chars: &mut impl Iterator<Item = char>) -> String {
     let mut word = String::new();
     while let Some(char) = chars.next() {
@@ -237,20 +301,38 @@ fn parse_value_hint(arg: Arg, hint: String) -> Arg {
     }
 }
 
+/// Set Value Name if `<chars>` is found.
+///
+/// Example :
+/// ```
+///            Received name
+///   ------------------------------------
+///
+///               values names added
+///          -------- -------- -----------
+/// --manger <Légume> <Gibier> <?Féculent>
+///   ------                    -
+/// extract name             optional
+/// ```
+/// all spaces will be trimmed
 fn parse_value_name(mut arg: Arg, name: String) -> (Arg, String) {
     let mut names = name.split("<");
-    let name_parsed = names.next().unwrap().trim().to_string();
-    // Example :
-    // --manger <Légume> <Gibier> <Féculent>
-    // all spaces will be trimmed
+    let name_parsed = Option::unwrap(names.next()).trim().to_string();
+    let mut min = 0;
+    let mut max = 0;
     while let Some(value_name) = names.next()
         && value_name.trim().ends_with(">")
     {
+        max += 1;
+        if !value_name.starts_with("?") {
+            min += 1;
+        }
         arg = arg.value_name(value_name.trim().to_string());
     }
-    (arg, name_parsed)
+    (arg.num_args(min..=max), name_parsed)
 }
 
+/// Extract the config name using all possible options chars.
 fn extract_config(configured_name: String) -> (Vec<char>, String) {
     let mut config = Vec::new();
     let mut chars = configured_name.chars();
@@ -273,6 +355,20 @@ fn extract_config(configured_name: String) -> (Vec<char>, String) {
     (config, name)
 }
 
+/// Separate named's config and flag specifig config.
+///
+/// Possibles config are `-` or `--` followed
+///
+/// Exemple :
+/// ```
+/// config: Vec<char>
+/// ------
+/// Config Name
+/// ---
+/// !_=--?flag
+///    ---
+///    Flag config
+/// `` `
 fn extract_flag_config(config: Vec<char>) -> (Vec<char>, String) {
     let mut chars_config = config.into_iter();
     let mut flag_config = String::new();
